@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tablero - Junta 1 julio</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
+</head>
+<body class="bg-light">
+
+  <div class="container py-4">
+    <h2 class="text-center mb-4">Tablero de Compromisos - Junta 1 Julio</h2>
+
+    <!-- Filtros -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <select id="filtroEtapa" class="form-select">
+          <option value="">Filtrar por Etapa</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select id="filtroRegion" class="form-select">
+          <option value="">Filtrar por Región</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select id="filtroDesarrollo" class="form-select">
+          <option value="">Filtrar por Desarrollo</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select id="filtroCumplido" class="form-select">
+          <option value="">Filtrar por Cumplido</option>
+          <option value="true">Cumplido</option>
+          <option value="false">Pendiente</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Indicador de carga -->
+    <div id="indicadorCarga" class="text-center text-muted mb-2">Cargando compromisos...</div>
+
+    <!-- Tabla -->
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+          <tr>
+            <th>Etapa</th>
+            <th>Región</th>
+            <th>Desarrollo</th>
+            <th>Asunto</th>
+            <th>Responsable</th>
+            <th>Fecha compromiso</th>
+            <th>Observaciones</th>
+            <th>Cumplido</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-compromisos"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAuWx1X51ZlBwIK2MPLUnKDConwEY2j9uA",
+      authDomain: "junta-int-1jul25-v1.firebaseapp.com",
+      projectId: "junta-int-1jul25-v1",
+      storageBucket: "junta-int-1jul25-v1.appspot.com",
+      messagingSenderId: "682041011857",
+      appId: "1:682041011857:web:891190fd08647a3bce1930"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const tbody = document.getElementById("tbody-compromisos");
+    const indicadorCarga = document.getElementById("indicadorCarga");
+    const filtros = {
+      etapa: document.getElementById("filtroEtapa"),
+      region: document.getElementById("filtroRegion"),
+      desarrollo: document.getElementById("filtroDesarrollo"),
+      cumplido: document.getElementById("filtroCumplido")
+    };
+
+    let datosOriginales = [];
+
+    async function cargarCompromisos() {
+      try {
+        const snapshot = await db.collection("compromisos_1julio").get();
+        datosOriginales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log("Datos obtenidos:", datosOriginales);
+        indicadorCarga.innerText = `Documentos cargados: ${datosOriginales.length}`;
+        actualizarFiltros();
+        renderizarTabla();
+      } catch (error) {
+        Swal.fire({ icon: "error", title: "Error al cargar datos", text: error.message });
+        indicadorCarga.innerText = "No se pudieron cargar los datos.";
+      }
+    }
+
+    function actualizarFiltros() {
+      const campos = ["etapa", "region", "desarrollo"];
+      campos.forEach(campo => {
+        const valoresUnicos = [...new Set(datosOriginales.map(d => (d[campo] || "").trim()))];
+        filtros[campo].innerHTML = `<option value="">Filtrar por ${campo.charAt(0).toUpperCase() + campo.slice(1)}</option>` +
+          valoresUnicos.map(val => `<option value="${val}">${val}</option>`).join("");
+      });
+    }
+
+    function normalizar(valor) {
+      return (valor || "").toString().trim().toLowerCase();
+    }
+
+    function renderizarTabla() {
+      tbody.innerHTML = "";
+      const filtroEtapa = filtros.etapa.value;
+      const filtroRegion = filtros.region.value;
+      const filtroDesarrollo = filtros.desarrollo.value;
+      const filtroCumplido = filtros.cumplido.value;
+
+      const datosFiltrados = datosOriginales.filter(c => {
+        const cumplidoFiltrado = filtroCumplido === "" ? null : (filtroCumplido === "true");
+        return (!filtroEtapa || normalizar(c.etapa) === normalizar(filtroEtapa)) &&
+               (!filtroRegion || normalizar(c.region) === normalizar(filtroRegion)) &&
+               (!filtroDesarrollo || normalizar(c.desarrollo) === normalizar(filtroDesarrollo)) &&
+               (cumplidoFiltrado === null || c.cumplido === cumplidoFiltrado);
+      });
+
+      if (datosFiltrados.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No se encontraron resultados</td></tr>';
+        return;
+      }
+
+      datosFiltrados.forEach(c => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${c.etapa || ""}</td>
+          <td>${c.region || ""}</td>
+          <td>${c.desarrollo || ""}</td>
+          <td>${c.asunto || ""}</td>
+          <td>${c.responsable || ""}</td>
+          <td>${c.fecha || ""}</td>
+          <td>${c.observaciones || ""}</td>
+          <td>
+            <input type="checkbox" ${c.cumplido ? "checked" : ""} data-id="${c.id}">
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener("change", async (e) => {
+          const id = e.target.getAttribute("data-id");
+          const nuevoValor = e.target.checked;
+          try {
+            await db.collection("compromisos_1julio").doc(id).update({ cumplido: nuevoValor });
+            Swal.fire({ icon: "success", title: "Actualizado", text: "Estado de cumplimiento actualizado", timer: 1500, showConfirmButton: false });
+          } catch (error) {
+            Swal.fire({ icon: "error", title: "Error", text: "No se pudo actualizar el documento" });
+            e.target.checked = !nuevoValor;
+          }
+        });
+      });
+    }
+
+    Object.values(filtros).forEach(filtro => filtro.addEventListener("change", renderizarTabla));
+    cargarCompromisos();
+  </script>
+</body>
+</html>
